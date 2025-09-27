@@ -10,8 +10,9 @@ def preprocess_text(text):
     """
     Preprocess the input text according to the following rules:
     1. Lower text, remove pre and post white-space
-    2. Remove non-Vietnamese characters (j, z, w, ...)
-    3. Remove pre and post punctuation
+    2. Handle common Vietnamese address abbreviations
+    3. Remove non-Vietnamese characters (j, z, w, ...)
+    4. Remove pre and post punctuation
     
     Args:
         text: The input text string
@@ -22,7 +23,12 @@ def preprocess_text(text):
     # 1. Convert to lowercase and remove leading/trailing whitespaces
     text = text.lower().strip()
     
-    # 2. Remove non-Vietnamese characters (j, z, w, ...)
+    # 2. Handle common Vietnamese address abbreviations
+    text = text.replace('thành phố', "").replace('tp', "").replace('phố', "").replace('hcm', "hồ chí minh").replace(' hn', " hà nội ")
+    text = text.replace('tỉnh', "").replace(' t ', " ").replace('huyện', "").replace(' h ', " ")
+    text = text.replace('xã', "").replace(' x ', " ").replace('phường', "").replace(' p ', " ")
+    
+    # 3. Remove non-Vietnamese characters (j, z, w, ...)
     # Create a mapping of characters to be replaced
     non_viet_chars = {
         'j': 'i',
@@ -34,7 +40,7 @@ def preprocess_text(text):
     for char, replacement in non_viet_chars.items():
         text = text.replace(char, replacement)
     
-    # 3. Remove pre and post punctuation
+    # 4. Remove pre and post punctuation
     text = text.strip(string.punctuation)
     
     # Additional cleaning: normalize whitespace within the text
@@ -42,15 +48,17 @@ def preprocess_text(text):
     
     return text
 
-def generate_variants(word):
+def generate_variants(word, max_variants=2000):
     """
     Generate variants of the word with the following cases:
     1. Missing character (deletion)
     2. Replaced character (substitution)
     3. Inserted character (insertion)
+    4. Missing spaces (concatenation)
     
     Args:
         word: The original word
+        max_variants: Maximum number of variants to generate to prevent memory issues
         
     Returns:
         A list of word variants
@@ -67,6 +75,8 @@ def generate_variants(word):
             continue
         variant = word[:i] + word[i+1:]
         variants.add(variant)
+        if len(variants) > max_variants:
+            return list(variants)
     
     # Case 2: Replaced character (substitution)
     for i in range(len(word)):
@@ -77,14 +87,34 @@ def generate_variants(word):
             if char != word[i]:
                 variant = word[:i] + char + word[i+1:]
                 variants.add(variant)
+                if len(variants) > max_variants:
+                    return list(variants)
     
     # Case 3: Inserted character (insertion)
     for i in range(len(word) + 1):
         for char in string.ascii_lowercase + 'áàảãạăắằẳẵặâấầẩẫậđéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ':
             variant = word[:i] + char + word[i:]
             variants.add(variant)
+            if len(variants) > max_variants:
+                return list(variants)
     
-    return variants
+    # Case 4: Missing spaces (concatenation)
+    if ' ' in word:
+        # Create a variant with all spaces removed
+        no_space_variant = word.replace(' ', '')
+        variants.add(no_space_variant)
+        
+        # Create variants with some spaces removed
+        words = word.split()
+        if len(words) > 1:
+            for i in range(len(words) - 1):
+                # Join words at position i and i+1
+                concatenated = words.copy()
+                concatenated[i] = concatenated[i] + concatenated[i+1]
+                concatenated.pop(i+1)
+                variants.add(' '.join(concatenated))
+    
+    return list(variants)
 
 def insert_with_variants(trie, word, value=None):
     """
@@ -299,7 +329,11 @@ class Solution:
             found = False
             for i in range(len(words)):
                 phrase = " ".join(words[i:])
-                is_found, value, _ = self.province_trie.search(phrase)
+                print("phrase:", phrase)
+                # Apply preprocessing to phrase before searching
+                processed_phrase = preprocess_text(phrase)
+                print("processed_phrase:", processed_phrase)
+                is_found, value, _ = self.province_trie.search(processed_phrase)
                 if is_found and not result["province"]:
                     result["province"] = value
                     # Store the remaining part for next passes
@@ -321,7 +355,9 @@ class Solution:
             found = False
             for i in range(len(words)):
                 phrase = " ".join(words[i:])
-                is_found, value, _ = self.district_trie.search(phrase)
+                # Apply preprocessing to phrase before searching
+                processed_phrase = preprocess_text(phrase)
+                is_found, value, _ = self.district_trie.search(processed_phrase)
                 if is_found and not result["district"]:
                     result["district"] = value
                     remaining_part = " ".join(words[:i])
@@ -342,7 +378,9 @@ class Solution:
             found = False
             for i in range(len(words)):
                 phrase = " ".join(words[i:])
-                is_found, value, _ = self.ward_trie.search(phrase)
+                # Apply preprocessing to phrase before searching
+                processed_phrase = preprocess_text(phrase)
+                is_found, value, _ = self.ward_trie.search(processed_phrase)
                 if is_found and not result["ward"]:
                     result["ward"] = value
                     remaining_part = " ".join(words[:i])
@@ -405,11 +443,23 @@ if __name__ == "__main__":
             print(f"Found province: '{value}'")
         else:
             print(f"Province '{test_province_with_j}' not found")
+        
+        # Test with . characters
+        test_province_with_dot = "T Giang"  # With punctuation
+        processed_query = preprocess_text(test_province_with_dot)
+        print(f"Original: '{test_province_with_dot}', Processed: '{processed_query}'")
+        is_found, value, word = province_trie.search(processed_query)
+        if is_found:
+            print(f"Found province: '{value}'")
+        else:
+            print(f"Province '{test_province_with_dot}' not found")
+        
+    
 
     # Test the Solution class
-    print("\nTesting Solution class:")
-    solution = Solution()
-    address = "284DBis Ng Văn Giáo, P3, Mỹ Tho, Tien Giang"
-    result = solution.process(address)
-    print(f"Input: {address}")
-    print(f"Extracted: Province={result['province']}, District={result['district']}, Ward={result['ward']}")
+    # print("\nTesting Solution class:")
+    # solution = Solution()
+    # address = "284DBis Ng Văn Giáo, P3, Mỹ Tho, T.Giang."
+    # result = solution.process(address)
+    # print(f"Input: {address}")
+    # print(f"Extracted: Province={result['province']}, District={result['district']}, Ward={result['ward']}")
