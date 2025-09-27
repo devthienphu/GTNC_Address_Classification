@@ -55,6 +55,7 @@ def generate_variants(word, max_variants=2000):
     2. Replaced character (substitution)
     3. Inserted character (insertion)
     4. Missing spaces (concatenation)
+    5. Sub-abbreviation (first char + remaining words) with various separators
     
     Args:
         word: The original word
@@ -113,6 +114,40 @@ def generate_variants(word, max_variants=2000):
                 concatenated[i] = concatenated[i] + concatenated[i+1]
                 concatenated.pop(i+1)
                 variants.add(' '.join(concatenated))
+    
+    # Case 5: Sub-abbreviation (first char of first word + remaining words)
+    if ' ' in word:
+        words = word.split()
+        if len(words) > 1:
+            # Take first letter of first word
+            first_word_abbr = words[0][0]
+            
+            # Common separators used in Vietnamese addresses
+            separators = ['', ' ', '.', '-', ',', ':']
+            
+            # Generate variants with different separators
+            for sep in separators:
+                variant = first_word_abbr + sep + ' '.join(words[1:])
+                variants.add(variant)
+            
+            # Generate abbreviated versions for multi-word names
+            # For cases like "Hồ Chí Minh" → "HCM" or "H.C.M"
+            if len(words) > 2:
+                # Just initials
+                initials = ''.join(w[0] for w in words)
+                variants.add(initials)
+                
+                # Initials with different separators
+                for sep in separators:
+                    if sep:  # Skip empty separator as we already added it
+                        initials_with_sep = sep.join(w[0] for w in words)
+                        variants.add(initials_with_sep)
+                        
+                        # Also add variants with spaces after separators
+                        # Like "H. C. M"
+                        if sep in ['.', ',', '-', ':']:
+                            initials_with_sep_space = (sep + ' ').join(w[0] for w in words)
+                            variants.add(initials_with_sep_space)
     
     return list(variants)
 
