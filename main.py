@@ -10,8 +10,9 @@ def preprocess_text(text):
     """
     Preprocess the input text according to the following rules:
     1. Lower text, remove pre and post white-space
-    2. Remove non-Vietnamese characters (j, z, w, ...)
-    3. Remove pre and post punctuation
+    2. Handle common Vietnamese address abbreviations
+    3. Remove non-Vietnamese characters (j, z, w, ...)
+    4. Remove pre and post punctuation
     
     Args:
         text: The input text string
@@ -22,7 +23,12 @@ def preprocess_text(text):
     # 1. Convert to lowercase and remove leading/trailing whitespaces
     text = text.lower().strip()
     
-    # 2. Remove non-Vietnamese characters (j, z, w, ...)
+    # 2. Handle common Vietnamese address abbreviations
+    text = text.replace('thành phố', "").replace('tp', "").replace('phố', "").replace('hcm', "hồ chí minh").replace(' hn', " hà nội ")
+    text = text.replace('tỉnh', "").replace(' t ', " ").replace('huyện', "").replace(' h ', " ")
+    text = text.replace('xã', "").replace(' x ', " ").replace('phường', "").replace(' p ', " ")
+    
+    # 3. Remove non-Vietnamese characters (j, z, w, ...)
     # Create a mapping of characters to be replaced
     non_viet_chars = {
         'j': 'i',
@@ -34,7 +40,7 @@ def preprocess_text(text):
     for char, replacement in non_viet_chars.items():
         text = text.replace(char, replacement)
     
-    # 3. Remove pre and post punctuation
+    # 4. Remove pre and post punctuation
     text = text.strip(string.punctuation)
     
     # Additional cleaning: normalize whitespace within the text
@@ -42,15 +48,60 @@ def preprocess_text(text):
     
     return text
 
-def generate_variants(word):
+def remove_vietnamese_accents(text):
+    """
+    Remove accents from Vietnamese characters
+    
+    Args:
+        text: The input text string
+        
+    Returns:
+        The text without accents
+    """
+    # Define the mapping of accented characters to non-accented ones
+    accent_mapping = {
+        'á': 'a', 'à': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a',
+        'ă': 'a', 'ắ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
+        'â': 'a', 'ấ': 'a', 'ầ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
+        'đ': 'd',
+        'é': 'e', 'è': 'e', 'ẻ': 'e', 'ẽ': 'e', 'ẹ': 'e',
+        'ê': 'e', 'ế': 'e', 'ề': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
+        'í': 'i', 'ì': 'i', 'ỉ': 'i', 'ĩ': 'i', 'ị': 'i',
+        'ó': 'o', 'ò': 'o', 'ỏ': 'o', 'õ': 'o', 'ọ': 'o',
+        'ô': 'o', 'ố': 'o', 'ồ': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o',
+        'ơ': 'o', 'ớ': 'o', 'ờ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
+        'ú': 'u', 'ù': 'u', 'ủ': 'u', 'ũ': 'u', 'ụ': 'u',
+        'ư': 'u', 'ứ': 'u', 'ừ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
+        'ý': 'y', 'ỳ': 'y', 'ỷ': 'y', 'ỹ': 'y', 'ỵ': 'y'
+    }
+    
+    # Apply the mapping
+    result = ""
+    for char in text:
+        lower_char = char.lower()
+        if lower_char in accent_mapping:
+            # Maintain the original case
+            if char.isupper():
+                result += accent_mapping[lower_char].upper()
+            else:
+                result += accent_mapping[lower_char]
+        else:
+            result += char
+            
+    return result
+
+def generate_variants(word, max_variants=2000):
     """
     Generate variants of the word with the following cases:
     1. Missing character (deletion)
     2. Replaced character (substitution)
     3. Inserted character (insertion)
+    4. Missing spaces (concatenation)
+    5. Sub-abbreviation (first char + remaining words) with various separators
     
     Args:
         word: The original word
+        max_variants: Maximum number of variants to generate to prevent memory issues
         
     Returns:
         A list of word variants
@@ -67,6 +118,8 @@ def generate_variants(word):
             continue
         variant = word[:i] + word[i+1:]
         variants.add(variant)
+        if len(variants) > max_variants:
+            return list(variants)
     
     # Case 2: Replaced character (substitution)
     for i in range(len(word)):
@@ -77,14 +130,68 @@ def generate_variants(word):
             if char != word[i]:
                 variant = word[:i] + char + word[i+1:]
                 variants.add(variant)
+                if len(variants) > max_variants:
+                    return list(variants)
     
     # Case 3: Inserted character (insertion)
     for i in range(len(word) + 1):
         for char in string.ascii_lowercase + 'áàảãạăắằẳẵặâấầẩẫậđéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵ':
             variant = word[:i] + char + word[i:]
             variants.add(variant)
+            if len(variants) > max_variants:
+                return list(variants)
     
-    return variants
+    # Case 4: Missing spaces (concatenation)
+    if ' ' in word:
+        # Create a variant with all spaces removed
+        no_space_variant = word.replace(' ', '')
+        variants.add(no_space_variant)
+        
+        # Create variants with some spaces removed
+        words = word.split()
+        if len(words) > 1:
+            for i in range(len(words) - 1):
+                # Join words at position i and i+1
+                concatenated = words.copy()
+                concatenated[i] = concatenated[i] + concatenated[i+1]
+                concatenated.pop(i+1)
+                variants.add(' '.join(concatenated))
+    
+    # Case 5: Sub-abbreviation (first char of first word + remaining words)
+    if ' ' in word:
+        words = word.split()
+        if len(words) > 1:
+            # Take first letter of first word
+            first_word_abbr = words[0][0]
+            
+            # Common separators used in Vietnamese addresses
+            separators = ['', ' ', '.', '-', ',', ':']
+            
+            # Generate variants with different separators
+            for sep in separators:
+                variant = first_word_abbr + sep + ' '.join(words[1:])
+                variants.add(variant)
+            
+            # Generate abbreviated versions for multi-word names
+            # For cases like "Hồ Chí Minh" → "HCM" or "H.C.M"
+            if len(words) > 2:
+                # Just initials
+                initials = ''.join(w[0] for w in words)
+                variants.add(initials)
+                
+                # Initials with different separators
+                for sep in separators:
+                    if sep:  # Skip empty separator as we already added it
+                        initials_with_sep = sep.join(w[0] for w in words)
+                        variants.add(initials_with_sep)
+                        
+                        # Also add variants with spaces after separators
+                        # Like "H. C. M"
+                        if sep in ['.', ',', '-', ':']:
+                            initials_with_sep_space = (sep + ' ').join(w[0] for w in words)
+                            variants.add(initials_with_sep_space)
+    
+    return list(variants)
 
 def insert_with_variants(trie, word, value=None):
     """
@@ -103,13 +210,34 @@ def insert_with_variants(trie, word, value=None):
     if lowercase_word != word:
         trie.insert(lowercase_word, value)
     
+    # Generate and insert the accent-free version
+    accent_free_word = remove_vietnamese_accents(lowercase_word)
+    if accent_free_word != lowercase_word:
+        # Check if it exists before insertion
+        is_found, _, _ = trie.search(accent_free_word)
+        if not is_found:
+            # if 'thanh' in accent_free_word:
+            #     print(f"variant: {accent_free_word}, original word: {word}")  # Debug print
+            trie.insert(accent_free_word, value)
+    
     # Generate and insert variants based on the lowercase version
     # to ensure we capture all potential typos
     variants = generate_variants(lowercase_word)
     for variant in variants:
-        # Insert variants but mark them as the original word
-        # This ensures searches for variants find the original word
-        trie.insert(variant, value)
+        # Check if the variant already exists in the trie
+        is_found, _, _ = trie.search(variant)
+        if not is_found:
+            # Insert variants but mark them as the original word
+            # This ensures searches for variants find the original word
+            trie.insert(variant, value)
+        
+        # Also insert accent-free variants
+        accent_free_variant = remove_vietnamese_accents(variant)
+        if accent_free_variant != variant:
+            # Check if the accent-free variant already exists
+            is_found, _, _ = trie.search(accent_free_variant)
+            if not is_found:
+                trie.insert(accent_free_variant, value)
 
 def create_ward_trie(data_path):
     """
@@ -299,7 +427,18 @@ class Solution:
             found = False
             for i in range(len(words)):
                 phrase = " ".join(words[i:])
-                is_found, value, _ = self.province_trie.search(phrase)
+                # Apply preprocessing to phrase before searching
+                processed_phrase = preprocess_text(phrase)
+                
+                # First try with original processed phrase
+                is_found, value, _ = self.province_trie.search(processed_phrase)
+                
+                # If not found, try with accent-free version
+                if not is_found:
+                    accent_free_phrase = remove_vietnamese_accents(processed_phrase)
+                    if accent_free_phrase != processed_phrase:
+                        is_found, value, _ = self.province_trie.search(accent_free_phrase)
+                
                 if is_found and not result["province"]:
                     result["province"] = value
                     # Store the remaining part for next passes
@@ -321,7 +460,18 @@ class Solution:
             found = False
             for i in range(len(words)):
                 phrase = " ".join(words[i:])
-                is_found, value, _ = self.district_trie.search(phrase)
+                # Apply preprocessing to phrase before searching
+                processed_phrase = preprocess_text(phrase)
+                
+                # First try with original processed phrase
+                is_found, value, _ = self.district_trie.search(processed_phrase)
+                
+                # If not found, try with accent-free version
+                if not is_found:
+                    accent_free_phrase = remove_vietnamese_accents(processed_phrase)
+                    if accent_free_phrase != processed_phrase:
+                        is_found, value, _ = self.district_trie.search(accent_free_phrase)
+                
                 if is_found and not result["district"]:
                     result["district"] = value
                     remaining_part = " ".join(words[:i])
@@ -342,7 +492,18 @@ class Solution:
             found = False
             for i in range(len(words)):
                 phrase = " ".join(words[i:])
-                is_found, value, _ = self.ward_trie.search(phrase)
+                # Apply preprocessing to phrase before searching
+                processed_phrase = preprocess_text(phrase)
+                
+                # First try with original processed phrase
+                is_found, value, _ = self.ward_trie.search(processed_phrase)
+                
+                # If not found, try with accent-free version
+                if not is_found:
+                    accent_free_phrase = remove_vietnamese_accents(processed_phrase)
+                    if accent_free_phrase != processed_phrase:
+                        is_found, value, _ = self.ward_trie.search(accent_free_phrase)
+                
                 if is_found and not result["ward"]:
                     result["ward"] = value
                     remaining_part = " ".join(words[:i])
@@ -405,11 +566,23 @@ if __name__ == "__main__":
             print(f"Found province: '{value}'")
         else:
             print(f"Province '{test_province_with_j}' not found")
+        
+        # Test with . characters
+        test_province_with_dot = "T.Giang"  # With punctuation
+        processed_query = preprocess_text(test_province_with_dot)
+        print(f"Original: '{test_province_with_dot}', Processed: '{processed_query}'")
+        is_found, value, word = province_trie.search(processed_query)
+        if is_found:
+            print(f"Found province: '{value}'")
+        else:
+            print(f"Province '{test_province_with_dot}' not found")
+        
+    
 
     # Test the Solution class
     print("\nTesting Solution class:")
     solution = Solution()
-    address = "284DBis Ng Văn Giáo, P3, Mỹ Tho, Tien Giang"
+    address = "Đô xá, Dân Lực, Triệu Sơn, Thanh Hoá."
     result = solution.process(address)
     print(f"Input: {address}")
     print(f"Extracted: Province={result['province']}, District={result['district']}, Ward={result['ward']}")

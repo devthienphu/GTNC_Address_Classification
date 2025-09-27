@@ -25,6 +25,7 @@ This project implements a Trie data structure to efficiently store and search Vi
 - **Fast prefix search**: Efficiently finds all addresses starting with a given prefix
 - **Case-insensitive matching**: Maintains original capitalization in results
 - **Right-to-left search**: Optimized for Vietnamese address format
+- **Sliding windows Longest Match**: Advanced algorithm for precise component detection
 - **Text preprocessing**: Handles non-Vietnamese characters and punctuation
 - **Reusable design**: The Trie implementation can be used for other applications
 
@@ -50,9 +51,22 @@ Input text is preprocessed before searching:
 3. Removing pre and post punctuation
 4. Normalizing whitespace within the text
 
-### Right-to-Left Search
+### Sliding Windows Longest Match Algorithm
 
-Vietnamese addresses typically follow the format: [street number], [street name], [ward], [district], [province]. Our algorithm searches from right-to-left to prioritize finding the province first (typically at the end), then looks for district before the province, and finally for ward before the district.
+Our updated implementation uses a sliding windows approach with a Longest Match algorithm to precisely extract address components:
+
+1. **Segmentation**: The address is first split by commas to separate potential components
+2. **Right-to-Left Processing**: We process segments from right to left, which matches the natural order of Vietnamese addresses (province at the end)
+3. **Multi-Pass Processing**: Three separate passes are conducted for province, district, and ward identification
+4. **Sliding Window Technique**: For each segment, we slide a window from the rightmost word, gradually expanding leftward to find the longest matching phrase
+5. **Remnant Preservation**: Unmatched portions of segments are preserved and forwarded to subsequent passes
+6. **Sequential Matching**: Address components are identified in order: province → district → ward
+
+This approach offers several advantages:
+- More accurate extraction of address components
+- Better handling of complex or ambiguous address formats
+- Precise identification of administrative boundaries
+- Ability to correctly process addresses with irregular formatting
 
 ### Case-Insensitive Matching with Original Case Preservation
 
@@ -134,6 +148,7 @@ else:
 ## Performance Considerations
 
 - The Trie structure provides O(m) time complexity for lookup operations, where m is the length of the key
+- Sliding windows Longest Match algorithm improves extraction accuracy with O(n²) complexity for each segment, where n is the number of words
 - Right-to-left search improves accuracy for typical Vietnamese address formats
 - Generating all possible variants increases memory usage but greatly improves error tolerance
 - Case-insensitive matching with preservation of original capitalization adds minimal overhead
