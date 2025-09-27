@@ -273,14 +273,7 @@ class Solution:
     
     def process(self, address_text):
         """
-        Process an address text to extract province, district, and ward
-        using right-to-left search direction.
-        
-        Args:
-            address_text: The address text to process
-            
-        Returns:
-            A dictionary containing province, district, and ward
+        Extract address, performing three separate searches for each administrative level.
         """
         result = {
             "province": "",
@@ -288,113 +281,79 @@ class Solution:
             "ward": ""
         }
         
-        # Preprocess the address text
+        # 1. preprocess text
         processed_text = preprocess_text(address_text)
         
-        # Split the text into parts (simple tokenization)
-        parts = processed_text.split()
+        # 2. split string by comma
+        segments = [s.strip() for s in processed_text.split(',') if s.strip()]
         
-        # Using right-to-left search approach
-        # Start from the right (end) of the address string
+        # TEMP variable to hold unmatched segments
+        unmatched_segments = list(segments)
         
-        # 1. First search for province (typically at the end of Vietnamese addresses)
-        province_found = False
-        province_end_idx = len(parts)  # Start from the end
-        
-        # Try different lengths of word combinations from the end of the string
-        for length in range(min(4, len(parts)), 0, -1):
-            if province_found:
-                break
-                
-            for start in range(len(parts) - length, -1, -1):
-                end = start + length
-                phrase = " ".join(parts[start:end])
+        # =================================================================
+        # FIND PROVINCE (PROVINCE)
+        # =================================================================
+        segments_after_province_pass = []
+        for segment in reversed(unmatched_segments):
+            words = segment.split()
+            found = False
+            for i in range(len(words)):
+                phrase = " ".join(words[i:])
                 is_found, value, _ = self.province_trie.search(phrase)
-                if is_found:
+                if is_found and not result["province"]:
                     result["province"] = value
-                    province_found = True
-                    province_end_idx = start  # Mark where province starts
+                    # Store the remaining part for next passes
+                    remaining_part = " ".join(words[:i])
+                    if remaining_part:
+                        segments_after_province_pass.insert(0, remaining_part)
+                    found = True
                     break
-        
-        # 2. Then search for district (typically before province)
-        district_found = False
-        district_end_idx = province_end_idx  # Search before the province
-        
-        # Try different lengths of word combinations before the province
-        for length in range(min(5, district_end_idx), 0, -1):
-            if district_found:
-                break
-                
-            for start in range(district_end_idx - length, -1, -1):
-                end = start + length
-                if end <= district_end_idx:
-                    phrase = " ".join(parts[start:end])
-                    is_found, value, _ = self.district_trie.search(phrase)
-                    if is_found:
-                        result["district"] = value
-                        district_found = True
-                        district_end_idx = start  # Mark where district starts
-                        break
-        
-        # 3. Finally search for ward (typically before district)
-        ward_found = False
-        
-        # Try different lengths of word combinations before the district
-        for length in range(min(5, district_end_idx), 0, -1):
-            if ward_found:
-                break
-                
-            for start in range(district_end_idx - length, -1, -1):
-                end = start + length
-                if end <= district_end_idx:
-                    phrase = " ".join(parts[start:end])
-                    is_found, value, _ = self.ward_trie.search(phrase)
-                    if is_found:
-                        result["ward"] = value
-                        ward_found = True
-                        break
-        
-        # If we couldn't find matches in the right-to-left order,
-        # try a more exhaustive search
-        if not result["province"]:
-            # Try to find province anywhere in the address
-            for length in range(min(4, len(parts)), 0, -1):
-                for start in range(len(parts) - length + 1):
-                    end = start + length
-                    phrase = " ".join(parts[start:end])
-                    is_found, value, _ = self.province_trie.search(phrase)
-                    if is_found:
-                        result["province"] = value
-                        break
-                if result["province"]:
+            if not found:
+                segments_after_province_pass.insert(0, segment)
+        unmatched_segments = segments_after_province_pass
+
+        # =================================================================
+        # FIND DISTRICT (DISTRICT)
+        # =================================================================
+        segments_after_district_pass = []
+        for segment in reversed(unmatched_segments):
+            words = segment.split()
+            found = False
+            for i in range(len(words)):
+                phrase = " ".join(words[i:])
+                is_found, value, _ = self.district_trie.search(phrase)
+                if is_found and not result["district"]:
+                    result["district"] = value
+                    remaining_part = " ".join(words[:i])
+                    if remaining_part:
+                        segments_after_district_pass.insert(0, remaining_part)
+                    found = True
                     break
-        
-        if not result["district"]:
-            # Try to find district anywhere in the address
-            for length in range(min(5, len(parts)), 0, -1):
-                for start in range(len(parts) - length + 1):
-                    end = start + length
-                    phrase = " ".join(parts[start:end])
-                    is_found, value, _ = self.district_trie.search(phrase)
-                    if is_found:
-                        result["district"] = value
-                        break
-                if result["district"]:
+            if not found:
+                segments_after_district_pass.insert(0, segment)
+        unmatched_segments = segments_after_district_pass
+
+        # =================================================================
+        # FIND WARD (WARD)
+        # =================================================================
+        segments_after_ward_pass = []
+        for segment in reversed(unmatched_segments):
+            words = segment.split()
+            found = False
+            for i in range(len(words)):
+                phrase = " ".join(words[i:])
+                is_found, value, _ = self.ward_trie.search(phrase)
+                if is_found and not result["ward"]:
+                    result["ward"] = value
+                    remaining_part = " ".join(words[:i])
+                    if remaining_part:
+                        segments_after_ward_pass.insert(0, remaining_part)
+                    found = True
                     break
+            if not found:
+                segments_after_ward_pass.insert(0, segment)
+        unmatched_segments = segments_after_ward_pass
         
-        if not result["ward"]:
-            # Try to find ward anywhere in the address
-            for length in range(min(5, len(parts)), 0, -1):
-                for start in range(len(parts) - length + 1):
-                    end = start + length
-                    phrase = " ".join(parts[start:end])
-                    is_found, value, _ = self.ward_trie.search(phrase)
-                    if is_found:
-                        result["ward"] = value
-                        break
-                if result["ward"]:
-                    break
-                    
         return result
 
 # Example usage:
